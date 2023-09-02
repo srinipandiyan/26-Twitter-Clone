@@ -121,7 +121,8 @@ def logout():
     session.pop(CURR_USER_KEY)
     flash("User is logged out.", "success")
     #f"{user.username} is logged out.""
-    return redirect("/login")
+    return redirect("/")
+
 
 
 ##############################################################################
@@ -196,7 +197,17 @@ def add_follow(follow_id):
         return redirect("/")
 
     followed_user = User.query.get_or_404(follow_id)
-    g.user.following.append(followed_user)
+    user = User.query.get_or_404(g.user.id)
+
+    #handle cases where followed user or user cannot be found
+    if followed_user is None or user is None:
+        abort(404)
+    #add followed user tp user following
+    if followed_user not in user.following:
+        user.following.append(followed_user)
+
+    #Add and committ modified user object
+    db.session.add(user)
     db.session.commit()
 
     return redirect(f"/users/{g.user.id}/following")
@@ -211,7 +222,17 @@ def stop_following(follow_id):
         return redirect("/")
 
     followed_user = User.query.get(follow_id)
-    g.user.following.remove(followed_user)
+    user = User.query.get_or_404(g.user.id)
+   
+    #handle cases where followed user or user cannot be found
+    if followed_user is None or user is None:
+        abort(404)
+    #remove followed user from user following
+    if followed_user in user.following:
+        user.following.remove(followed_user)
+
+    #Add and committ modified user object
+    db.session.add(user)
     db.session.commit()
 
     return redirect(f"/users/{g.user.id}/following")
@@ -257,15 +278,17 @@ def like_warble(message_id):
         return redirect("/login")
     
     liked_warble = Message.query.get_or_404(message_id)
-    if liked_warble.user_id == g.user.id:
-        return abort(403)
-    
-    user_likes = g.user.likes
-    if liked_warble in user_likes:
-        g.user.likes = [like for like in user_likes if like != liked_warble]
-    else:
-        g.user.likes.append(liked_warble)
+    user = User.query.get_or_404(g.user.id)
 
+    if liked_warble.user_id == g.user.id:
+        return abort(404)
+    
+    if liked_warble in user.likes:
+        user.likes.remove(liked_warble)
+    else:
+        user.likes.append(liked_warble)
+
+    db.session.add(user)
     db.session.commit()
 
     return redirect("/")
@@ -281,9 +304,8 @@ def display_all_likes(user_id):
     
     #get user id to display user associated likes
     user = User.query.get_or_404(user_id)
-    user_likes = user.likes
 
-    return render_template('users/likes.html', user=user, likes=user_likes)
+    return render_template('users/likes.html', user=user, likes=user.likes)
 
 
 
@@ -295,13 +317,13 @@ def delete_user():
         flash("Access unauthorized.", "danger")
         return redirect("/")
 
-   #call user using user_id
+    #call user using user_id
     user = User.query.get_or_404(g.user.id)
+
     db.session.delete(user)
     db.session.commit()
 
     do_logout()
-
 
     return redirect("/signup")
 
@@ -323,8 +345,16 @@ def messages_add():
     form = MessageForm()
 
     if form.validate_on_submit():
+        user = User.query.get_or_404(g.user.id)
         msg = Message(text=form.text.data)
-        g.user.messages.append(msg)
+
+        #handle case where user cannot be retrived
+        if user is None:
+            abort(404)
+
+        user.messages.append(msg)
+
+        db.session.add(user)
         db.session.commit()
 
         return redirect(f"/users/{g.user.id}")
@@ -352,6 +382,7 @@ def messages_destroy(message_id):
     if msg.user_id != g.user.id:
         flash("Access unauthorized.", "danger")
         return redirect("/login")
+    
     db.session.delete(msg)
     db.session.commit()
 
@@ -371,20 +402,30 @@ def homepage():
     """
 
     if g.user:
+        user = User.query.get_or_404(g.user.id)
         #list comprehension to extract ids of user following
-        ids_of_following = [followed_user.id for followed_user in g.user.following] + [g.user.id]
+        ids_of_following = [followed_user.id for followed_user in user.following] + [user.id]
+        
+        #Check if the user has any followers
+        if len(user.following) == 0:
+            messages = (Message
+                        .query
+                        .order_by(Message.timestamp.desc())
+                        .limit(100)
+                        .all())
+            
+        #If following, then display messages of followed users
+        else:
+            messages = (Message
+                        .query
+                        .filter(Message.user_id.in_(ids_of_following))
+                        .order_by(Message.timestamp.desc())
+                        .limit(100)
+                        .all())
 
-        messages = (Message
-                    .query
-                    .filter(Message.user_id.in_(ids_of_following))
-                    .order_by(Message.timestamp.desc())
-                    .limit(100)
-                    .all())
-
-        liked_ids = [msg.id for msg in g.user.likes]
+        liked_ids = [msg.id for msg in user.likes]
 
         return render_template('home.html', messages=messages, likes=liked_ids)
-
     else:
         return render_template('home-anon.html')
 
