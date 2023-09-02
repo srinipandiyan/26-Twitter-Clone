@@ -295,10 +295,13 @@ def delete_user():
         flash("Access unauthorized.", "danger")
         return redirect("/")
 
+   #call user using user_id
+    user = User.query.get_or_404(g.user.id)
+    db.session.delete(user)
+    db.session.commit()
+
     do_logout()
 
-    db.session.delete(g.user)
-    db.session.commit()
 
     return redirect("/signup")
 
