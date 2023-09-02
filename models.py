@@ -94,14 +94,14 @@ class User(db.Model):
         nullable=False,
     )
 
-    messages = db.relationship('Message', back_populates="user")
+    messages = db.relationship('Message', back_populates="user", cascade="all, delete")
 
     followers = db.relationship(
         "User",
         secondary="follows",
         primaryjoin=(Follows.user_being_followed_id == id),
         secondaryjoin=(Follows.user_following_id == id),
-        back_populates="following"
+        back_populates="following",
     )
 
     following = db.relationship(
@@ -109,12 +109,13 @@ class User(db.Model):
         secondary="follows",
         primaryjoin=(Follows.user_following_id == id),
         secondaryjoin=(Follows.user_being_followed_id == id),
-        back_populates="followers"
+        back_populates="followers",
     )
 
     likes = db.relationship(
         'Message',
-        secondary="likes"
+        secondary="likes",
+        cascade="all, delete"
     )
 
     def __repr__(self):
